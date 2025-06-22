@@ -1,5 +1,5 @@
-python-telegram-bot==20.6
-web3==6.10.0
-fpdf==1.7.2
-solana==0.30.1
-nest_asyncio==1.6.0
+python-telegram-bot==20.3
+fpdf
+web3
+solana
+nest_asyncio
