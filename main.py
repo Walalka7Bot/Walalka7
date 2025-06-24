@@ -69,6 +69,88 @@ async def toggle_auto_trade(update: Update, context: ContextTypes.DEFAULT_TYPE):
     status = "✅ ON" if auto_trade_enabled else "⛔ OFF"
     await update.message.reply_text(f"Auto-Trade is now: {status}")
 
+from flask import Flask, request
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
+import threading
+import os
+import nest_asyncio
+nest_asyncio.apply()
+
+# ✅ ENV Variables
+INFURA_URL = os.getenv("INFURA_URL")
+WALLET_ADDRESS_ETH = os.getenv("WALLET_ADDRESS_ETH")
+PRIVATE_KEY_ETH = os.getenv("PRIVATE_KEY_ETH")
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+
+# ✅ Telegram App
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+
+# ✅ Start command
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("👋 Welcome! Bot is now active.")
+
+# ✅ Push notify command (manual test)
+async def notify(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = "🚨 New Trade Opportunity!\nPair: GOLD\nTime: 5min\nStatus: ⬆️ BUY Setup"
+    buttons = [[
+        InlineKeyboardButton("✅ Confirm", callback_data="CONFIRM:GOLD:BUY"),
+        InlineKeyboardButton("❌ Ignore", callback_data="IGNORE")
+    ]]
+    markup = InlineKeyboardMarkup(buttons)
+    await update.message.reply_text(msg, reply_markup=markup)
+
+# ✅ Button click handler
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    if query.data.startswith("CONFIRM"):
+        _, symbol, direction = query.data.split(":")
+        await query.edit_message_text(text=f"✅ Confirmed: {symbol} → {direction}")
+    elif query.data == "IGNORE":
+        await query.edit_message_text(text="❌ Signal ignored.")
+
+# ✅ Register commands
+app.add_handler(CommandHandler("start", start))
+app.add_handler(CommandHandler("notify", notify))
+app.add_handler(CallbackQueryHandler(button_handler))
+
+# ✅ Flask + Webhook route
+flask_app = Flask(__name__)
+
+@flask_app.route('/')
+def home():
+    return "Bot is running!"
+
+@flask_app.route('/webhook', methods=["POST"])
+def webhook_handler():
+    try:
+        data = request.get_json()
+        symbol = data.get("symbol", "Unknown")
+        direction = data.get("direction", "BUY/SELL")
+        time_frame = data.get("time", "5min")
+
+        msg = f"🚨 Signal Received!\nPair: {symbol}\nTime: {time_frame}\nDirection: {direction}"
+        buttons = [[
+            InlineKeyboardButton("✅ Confirm", callback_data=f"CONFIRM:{symbol}:{direction}"),
+            InlineKeyboardButton("❌ Ignore", callback_data="IGNORE")
+        ]]
+        markup = InlineKeyboardMarkup(buttons)
+
+        # ✅ Bedel CHAT ID hoose
+        app.bot.send_message(chat_id=CHAT_ID, text=msg, reply_markup=markup)
+        return "✅ Signal sent"
+    except Exception as e:
+        return f"❌ Error: {str(e)}"
+
+# ✅ Run Flask thread + bot
+def run_flask():
+    flask_app.run(host='0.0.0.0', port=10000)
+
+threading.Thread(target=run_flask).start()
+app.run_polling()
+
 # ✅ Run bot
 app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 app.add_handler(CommandHandler("profit", add_profit))
