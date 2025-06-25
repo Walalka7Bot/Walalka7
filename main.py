@@ -143,6 +143,266 @@ def webhook_handler():
         return "✅ Signal sent"
     except Exception as e:
         return f"❌ Error: {str(e)}"
+# ✅ CUTUBKA 11: Daily Report Generator (Single File)
+import os, json, asyncio
+from datetime import datetime
+from fpdf import FPDF
+from apscheduler.schedulers.background import BackgroundScheduler
+from telegram import Update
+from telegram.ext import ContextTypes, CommandHandler
+
+LOG_FILE = "daily_trades.json"
+CHAT_ID = os.getenv("CHAT_ID")
+
+# 1️⃣ Trade Logger
+def log_trade_result(symbol, result, pnl):
+    today = datetime.now().strftime("%Y-%m-%d")
+    log_entry = {"date": today, "symbol": symbol, "result": result, "pnl": pnl}
+
+    try:
+        with open(LOG_FILE, "r") as f:
+            data = json.load(f)
+    except (FileNotFoundError, json.decoder.JSONDecodeError):
+        data = []
+
+    data.append(log_entry)
+
+    with open(LOG_FILE, "w") as f:
+        json.dump(data, f, indent=2)
+
+# 2️⃣ PDF Generator
+def generate_daily_report():
+    today = datetime.now().strftime("%Y-%m-%d")
+    try:
+        with open(LOG_FILE, "r") as f:
+            data = json.load(f)
+    except:
+        return None
+
+    today_trades = [d for d in data if d["date"] == today]
+    if not today_trades:
+        return None
+
+    win_count = sum(1 for d in today_trades if d["result"].upper() == "WIN")
+    loss_count = sum(1 for d in today_trades if d["result"].upper() == "LOSS")
+    total_pnl = sum(float(d["pnl"]) for d in today_trades)
+
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=14)
+    pdf.cell(200, 10, txt=f"📊 Daily Report – {today}", ln=True, align='C')
+    pdf.ln(10)
+
+    for trade in today_trades:
+        line = f"{trade['symbol']} - {trade['result']} - P&L: ${trade['pnl']}"
+        pdf.cell(200, 10, txt=line, ln=True)
+
+    pdf.ln(10)
+    pdf.cell(200, 10, txt=f"✅ Wins: {win_count} | ❌ Losses: {loss_count} | 💰 Net P&L: ${round(total_pnl, 2)}", ln=True)
+
+    file_path = f"report_{today}.pdf"
+    pdf.output(file_path)
+    return file_path
+
+# 3️⃣ /report Command Handler
+async def report_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    pdf_path = generate_daily_report()
+    if not pdf_path:
+        await update.message.reply_text("⚠️ Ma jiro report maanta.")
+        return
+
+    with open(pdf_path, "rb") as f:
+        await context.bot.send_document(chat_id=update.effective_chat.id, document=f, filename=pdf_path)
+
+# ✅ Add this in your main.py:
+# app.add_handler(CommandHandler("report", report_command))
+
+# 4️⃣ Automatic Schedule @ 23:59
+def schedule_daily_report(bot):
+    scheduler = BackgroundScheduler()
+
+    def job():
+        pdf_path = generate_daily_report()
+        if pdf_path and CHAT_ID:
+            asyncio.run(bot.send_document(chat_id=CHAT_ID, document=open(pdf_path, "rb"), filename=pdf_path))
+
+    scheduler.add_job(job, 'cron', hour=23, minute=59)
+    scheduler.start()
+## ✅ Cutubka 12: Trade Result Buttons (WIN / LOSS / BE)
+
+### 🎯 Ujeeddo
+Markaad gujiso `Confirm` signal-ka, bot-ku wuxuu kuusoo bandhigayaa **3 buttons** si aad u sheegto natiijada ganacsiga:
+
+- ✅ `WIN`
+- ❌ `LOSS`
+- 🤝 `BE` (Breakeven)
+
+Bot-ka wuxuu si toos ah:
+- U keydiyaa result-kii
+- U xisaabiyaa P&L
+- U diiwaangeliyaa file JSON ah (`daily_trades.json`)
+- Waxaana lagu dari karaa `PDF` report-ka habeen kasta 23:59
+
+---
+
+### 🧠 Tallaabooyinka Code-ka:
+
+#### ✅ Update `signal_webhook` – Add callback to "Confirm"
+
+```python
+buttons = [[
+    InlineKeyboardButton("✅ Confirm", callback_data=f"CONFIRM:{symbol}:{direction}"),
+    InlineKeyboardButton("❌ Ignore", callback_data="IGNORE")
+]]
+```
+
+#### ✅ Add Callback for "CONFIRM" – Show Result Options
+
+```python
+@app.callback_query_handler(lambda c: c.data and c.data.startswith("CONFIRM:"))
+async def handle_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    _, symbol, direction = query.data.split(":")
+
+    buttons = [
+        [
+            InlineKeyboardButton("✅ WIN", callback_data=f"RESULT:WIN:{symbol}"),
+            InlineKeyboardButton("❌ LOSS", callback_data=f"RESULT:LOSS:{symbol}"),
+            InlineKeyboardButton("🤝 BE", callback_data=f"RESULT:BE:{symbol}")
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(buttons)
+    await query.message.reply_text(f"📊 What was the result for {symbol}?", reply_markup=reply_markup)
+```
+
+#### ✅ Handle Result Selection + Save to JSON
+
+```python
+import json
+from datetime import datetime
+
+DAILY_LOG = "daily_trades.json"
+
+@app.callback_query_handler(lambda c: c.data and c.data.startswith("RESULT:"))
+async def handle_result(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    _, result, symbol = query.data.split(":")
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+    trade_entry = {
+        "symbol": symbol,
+        "result": result,
+        "time": timestamp
+    }
+
+    try:
+        with open(DAILY_LOG, "r") as f:
+            data = json.load(f)
+    except:
+        data = []
+
+    data.append(trade_entry)
+
+    with open(DAILY_LOG, "w") as f:
+        json.dump(data, f, indent=2)
+
+    await query.message.reply_text(f"✅ Result saved: {symbol} → {result}")
+```
+
+---
+
+### 🧾 Tusaale JSON Format:
+```json
+[
+  {
+    "symbol": "EURUSD",
+    "result": "WIN",
+    "time": "2025-06-25 15:15"
+  }
+]
+```
+
+---
+
+## 🔄 Xiriir la leh:
+- ✅ **Cutubka 11**: Jadwal PDF report oo uu ka akhrisanayo file-ka `daily_trades.json`
+- ✅ **Cutubka 10**: Auto Lot Calculation si aad ugu xisaabiso result kasta
+# ✅ Cutubka 13: Memecoin Detector + Auto Halal Filter
+# Waxay raadisaa memecoins cusub, u diraa Telegram signal + halal status, wallet & chain info
+
+import requests, asyncio
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
+from telegram.ext import CommandHandler
+from apscheduler.schedulers.background import BackgroundScheduler
+
+# 🔒 Halal filter keywords
+HARAM_KEYWORDS = ["casino", "bet", "gamble", "loan", "alcohol", "riba", "sex"]
+
+# 🔎 Halal Checker
+def is_halal_coin(symbol: str) -> bool:
+    return not any(haram in symbol.lower() for haram in HARAM_KEYWORDS)
+
+# 📡 Fetch trending memecoins (from DEXscreener sample API)
+def fetch_trending_coins():
+    try:
+        response = requests.get("https://api.dexscreener.com/latest/dex/pairs")
+        data = response.json()
+
+        coins = []
+        for pair in data.get("pairs", [])[:5]:  # Top 5 only
+            coin = {
+                "name": pair["baseToken"]["name"],
+                "symbol": pair["baseToken"]["symbol"],
+                "chain": pair["chainId"],
+                "wallet": pair["pairAddress"],
+                "image": pair.get("imageUrl", None)
+            }
+            coins.append(coin)
+
+        return coins
+    except Exception as e:
+        print(f"Memecoin fetch error: {e}")
+        return []
+
+# 🚀 Send Telegram Alert with Halal status
+async def send_memecoin_alert(app, chat_id):
+    trending = fetch_trending_coins()
+    for coin in trending:
+        status = "🟢 Halal" if is_halal_coin(coin["symbol"]) else "🔴 Haram"
+        msg = (
+            f"🚀 *Trending Memecoin Alert!*\n\n"
+            f"Name: {coin['name']}\n"
+            f"Symbol: `{coin['symbol']}`\n"
+            f"Chain: {coin['chain']}\n"
+            f"Wallet: `{coin['wallet']}`\n"
+            f"Status: {status}"
+        )
+
+        buttons = [[
+            InlineKeyboardButton("🧾 View on DexTools", url=f"https://www.dexscreener.com/{coin['chain']}/{coin['wallet']}"),
+            InlineKeyboardButton("📥 Add to Watchlist", callback_data=f"WATCH_{coin['symbol']}")
+        ]]
+        reply_markup = InlineKeyboardMarkup(buttons)
+
+        try:
+            if coin["image"]:
+                await app.bot.send_photo(chat_id=chat_id, photo=coin["image"], caption=msg, parse_mode="Markdown", reply_markup=reply_markup)
+            else:
+                await app.bot.send_message(chat_id=chat_id, text=msg, parse_mode="Markdown", reply_markup=reply_markup)
+        except Exception as e:
+            print(f"Send error: {e}")
+
+# 🧪 /memecoins command
+app.add_handler(CommandHandler("memecoins", lambda u, c: asyncio.create_task(send_memecoin_alert(app, u.effective_chat.id))))
+
+# ⏰ Jadwal automatic ah – 60 daqiiqo kasta
+scheduler = BackgroundScheduler()
+scheduler.add_job(lambda: asyncio.run(send_memecoin_alert(app, chat_id=os.getenv("CHAT_ID"))), 'interval', minutes=60)
+scheduler.start()
 
 # ✅ Run Flask thread + bot
 def run_flask():
