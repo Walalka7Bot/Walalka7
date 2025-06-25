@@ -403,6 +403,94 @@ app.add_handler(CommandHandler("memecoins", lambda u, c: asyncio.create_task(sen
 scheduler = BackgroundScheduler()
 scheduler.add_job(lambda: asyncio.run(send_memecoin_alert(app, chat_id=os.getenv("CHAT_ID"))), 'interval', minutes=60)
 scheduler.start()
+# ✅ Cutubka 14: Auto Withdraw ETH
+# Si fudud ETH uga dir bot-ka wallet-kiisa adigoo isticmaalaya command /withdraw_eth
+
+import os, json
+from web3 import Web3
+from telegram.ext import CommandHandler
+
+INFURA_URL = os.getenv("INFURA_URL")
+PRIVATE_KEY_ETH = os.getenv("PRIVATE_KEY_ETH")
+WALLET_ADDRESS_ETH = os.getenv("WALLET_ADDRESS_ETH")
+
+web3 = Web3(Web3.HTTPProvider(INFURA_URL))
+
+# 🏦 Function: ETH Transfer
+def send_eth(destination: str, amount_eth: float) -> str:
+    try:
+        account = web3.eth.account.from_key(PRIVATE_KEY_ETH)
+        nonce = web3.eth.get_transaction_count(account.address)
+        tx = {
+            'nonce': nonce,
+            'to': destination,
+            'value': web3.to_wei(amount_eth, 'ether'),
+            'gas': 21000,
+            'gasPrice': web3.eth.gas_price
+        }
+        signed_tx = web3.eth.account.sign_transaction(tx, PRIVATE_KEY_ETH)
+        tx_hash = web3.eth.send_raw_transaction(signed_tx.rawTransaction)
+        return web3.to_hex(tx_hash)
+    except Exception as e:
+        return f"❌ Error: {e}"
+
+# 💬 Telegram Command: /withdraw_eth <wallet> <amount>
+async def withdraw_eth(update, context):
+    try:
+        args = context.args
+        if len(args) != 2:
+            await update.message.reply_text("❗ Format: /withdraw_eth <wallet_address> <amount>")
+            return
+
+        dest_wallet = args[0]
+        amount = float(args[1])
+
+        tx_hash = send_eth(dest_wallet, amount)
+        if tx_hash.startswith("0x"):
+            await update.message.reply_text(f"✅ ETH sent successfully!\nTransaction: https://etherscan.io/tx/{tx_hash}")
+        else:
+            await update.message.reply_text(tx_hash)
+    except Exception as e:
+        await update.message.reply_text(f"⚠️ Error: {e}")
+
+# 🧩 Add command handler
+app.add_handler(CommandHandler("withdraw_eth", withdraw_eth))
+# ✅ TP/SL Voice Alerts – Gool & Guuldarro Codad kala duwan
+from gtts import gTTS
+import tempfile
+from telegram.constants import ChatAction
+from telegram.ext import CommandHandler
+
+# 🔊 Play voice alert based on trade result
+async def play_result_voice(result_type: str, context, chat_id: str):
+    try:
+        await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.RECORD_AUDIO)
+
+        if result_type == "TP":
+            message = "Congratulations! Take Profit hit. Ka-ching!"
+        elif result_type == "SL":
+            message = "Stop Loss hit. Wax meynas galay!"
+        else:
+            message = "Unknown trade result."
+
+        tts = gTTS(message)
+        with tempfile.NamedTemporaryFile(delete=True) as tmp:
+            tts.save(tmp.name + ".mp3")
+            with open(tmp.name + ".mp3", "rb") as audio:
+                await context.bot.send_voice(chat_id=chat_id, voice=audio)
+    except Exception as e:
+        print(f"Voice alert error: {e}")
+
+# ✅ Manual Test Commands: /tp and /sl
+async def tp_alert(update, context):
+    await play_result_voice("TP", context, update.effective_chat.id)
+
+async def sl_alert(update, context):
+    await play_result_voice("SL", context, update.effective_chat.id)
+
+# ✅ Add handlers
+app.add_handler(CommandHandler("tp", tp_alert))
+app.add_handler(CommandHandler("sl", sl_alert))
 
 # ✅ Run Flask thread + bot
 def run_flask():
