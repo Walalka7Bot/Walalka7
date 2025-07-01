@@ -1,11 +1,10 @@
 python-telegram-bot
-Flask[async]
+Flask
+uvicorn # <--- Make sure this line is present
 gTTS
 fpdf
-web3
-requests
-APScheduler
 reportlab
-Pillow
+web3
 eth-account
-uvicorn # <<< Cusub
+Pillow
+APScheduler
