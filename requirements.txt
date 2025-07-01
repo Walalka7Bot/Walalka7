@@ -1,5 +1,11 @@
-python-telegram-bot==20.3
-web3==6.15.1
-solana==0.31.0
-fpdf==1.7.2
-nest_asyncio==1.5.8
+python-telegram-bot
+Flask[async]
+gTTS
+fpdf
+web3
+requests
+APScheduler
+reportlab
+Pillow
+eth-account
+uvicorn # <<< Cusub
