@@ -1,6 +1,6 @@
 python-telegram-bot
 Flask
-uvicorn # <--- Make sure this line is present
+uvicorn
 gTTS
 fpdf
 reportlab
