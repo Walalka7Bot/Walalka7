@@ -10,14 +10,12 @@ import os
 import csv
 from datetime import datetime
 from fpdf import FPDF
-from flask import Flask, request
-import threading
 
 # --- STATIC SETTINGS ---
 BALANCE = 5000
 MAX_DRAWDOWN = 250
 VALID_SYMBOLS = ["BTC", "ETH", "SOL", "XRP", "GOLD", "SILVER", "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD"]
-VIP_USERS = [123456789]  # beddel
+VIP_USERS = [CHAT_ID]  # Isticmaal chat ID sax ah
 
 # --- TELEGRAM BOT ---
 app = ApplicationBuilder().token(BOT_TOKEN).build()
@@ -71,9 +69,9 @@ async def sendsignal(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"⚠️ Error: {str(e)}")
 
 # --- /tp /sl /entry ---
-TP_SOUND = "tp_sound.mp3"
-SL_SOUND = "sl_sound.mp3"
-EN_SOUND = "entry_sound.mp3"
+TP_SOUND = "assets/tp_sound.mp3"
+SL_SOUND = "assets/sl_sound.mp3"
+EN_SOUND = "assets/entry_sound.mp3"
 
 async def tp(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("✅ *TP hit!* 💰", parse_mode='Markdown')
@@ -91,7 +89,7 @@ async def entry(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_audio(audio=audio)
 
 # --- /sendchart ---
-CHART_PATH = "chart_sample.jpg"
+CHART_PATH = "assets/chart_sample.jpg"
 async def sendchart(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         with open(CHART_PATH, 'rb') as photo:
@@ -126,7 +124,8 @@ async def risk(update: Update, context: ContextTypes.DEFAULT_TYPE):
 trades = [
     {"symbol": "EURUSD", "EN": "1.0845", "TP": "1.0880", "SL": "1.0825", "result": "WIN", "pnl": "+35 pips"},
     {"symbol": "GOLD", "EN": "2310.0", "TP": "2330.0", "SL": "2290.0", "result": "LOSS", "pnl": "-20 pips"},
-    {"symbol": "BTC", "EN": "65000", "TP": "67000", "SL": "64000", "result": "WIN", "pnl": "+2000"}
+    {"symbol": "BTC", "EN": "65000", "TP": "67000", "SL": "64000", "result": "WIN", "pnl": "+2000"},
+    {"symbol": "ETH", "EN": "3000", "TP": "3200", "SL": "2900", "result": "WIN", "pnl": "+20"}  # 💵 lacag 20
 ]
 
 def generate_pdf():
